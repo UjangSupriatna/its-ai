@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureZaiConfig } from '@/lib/zai-config';
+import { ZAI_CONFIG } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    // Ensure Z-AI config exists
-    ensureZaiConfig();
-
     const body = await request.json();
     const { text, voice = 'tongtong' } = body;
 
@@ -26,27 +23,23 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Dynamic import
+    // Dynamic import and directly instantiate with config
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = await ZAI.create();
+    const zai = new ZAI(ZAI_CONFIG);
 
+    // TTS uses 'input' not 'text'
     const response = await zai.audio.tts.create({
-      text: text,
+      input: text,
       voice: voice,
     });
 
-    const audioBase64 = response.data?.base64;
-
-    if (!audioBase64) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'Failed to synthesize speech' 
-      }, { status: 500 });
-    }
+    // Response is a Response object, need to convert to base64
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
 
     return NextResponse.json({ 
       success: true, 
-      audio: `data:audio/wav;base64,${audioBase64}`,
+      audio: `data:audio/wav;base64,${base64}`,
       voice: voice
     });
 

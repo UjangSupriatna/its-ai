@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureZaiConfig } from '@/lib/zai-config';
+import { ZAI_CONFIG } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    // Ensure Z-AI config exists
-    ensureZaiConfig();
-
     const body = await request.json();
     const { message, history } = body;
 
@@ -19,9 +16,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Dynamic import
+    // Dynamic import and directly instantiate with config
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = await ZAI.create();
+    const zai = new ZAI(ZAI_CONFIG);
 
     // Build messages array with history
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [

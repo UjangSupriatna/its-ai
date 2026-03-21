@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureZaiConfig } from '@/lib/zai-config';
+import { ZAI_CONFIG } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    // Ensure Z-AI config exists
-    ensureZaiConfig();
-
     const body = await request.json();
     const { prompt, quality = 'speed', duration = 5, fps = 30, imageUrl } = body;
 
@@ -19,9 +16,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Dynamic import
+    // Dynamic import and directly instantiate with config
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = await ZAI.create();
+    const zai = new ZAI(ZAI_CONFIG);
 
     // Create video generation task
     const taskParams: Record<string, unknown> = {
@@ -61,9 +58,6 @@ export async function POST(request: NextRequest) {
 // Check video generation status
 export async function GET(request: NextRequest) {
   try {
-    // Ensure Z-AI config exists
-    ensureZaiConfig();
-
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('taskId');
 
@@ -74,9 +68,9 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Dynamic import
+    // Dynamic import and directly instantiate with config
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = await ZAI.create();
+    const zai = new ZAI(ZAI_CONFIG);
 
     const result = await zai.async.result.query(taskId);
 
