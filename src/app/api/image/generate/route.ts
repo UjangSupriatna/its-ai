@@ -5,12 +5,8 @@ export const dynamic = 'force-dynamic';
 
 const HF_TOKEN = process.env.HF_TOKEN;
 
-// Use multiple models for fallback
-const IMAGE_MODELS = [
-  'stabilityai/stable-diffusion-2-1',
-  'runwayml/stable-diffusion-v1-5',
-  'CompVis/stable-diffusion-v1-4',
-];
+// Use Flux model which is more reliable on HF
+const IMAGE_MODEL = 'black-forest-labs/FLUX.1-schnell';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,67 +27,78 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
+    // Parse size
+    const [width, height] = size.split('x').map(Number);
+
     // Enhance prompt for better results
-    const enhancedPrompt = `${prompt}, high quality, detailed, professional`;
+    const enhancedPrompt = `${prompt}, high quality, detailed`;
 
-    // Try each model until one works
-    let lastError = '';
+    console.log('Generating image with prompt:', enhancedPrompt);
+
+    // Use Hugging Face Inference API
+    const url = `https://api-inference.huggingface.co/models/${IMAGE_MODEL}`;
     
-    for (const model of IMAGE_MODELS) {
-      try {
-        console.log(`Trying model: ${model}`);
-        
-        const url = `https://api-inference.huggingface.co/models/${model}`;
-        
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${HF_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            inputs: enhancedPrompt,
-            parameters: {
-              negative_prompt: "blurry, bad quality, distorted, ugly",
-            }
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.log(`Model ${model} failed:`, errorText);
-          lastError = errorText;
-          continue; // Try next model
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${HF_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: enhancedPrompt,
+        parameters: {
+          width: Math.min(width, 1024),
+          height: Math.min(height, 1024),
+          num_inference_steps: 4, // FLUX schnell is fast
         }
+      }),
+    });
 
-        // Response is image blob, convert to base64
-        const imageBuffer = await response.arrayBuffer();
-        const base64 = Buffer.from(imageBuffer).toString('base64');
-        const imageUrl = `data:image/png;base64,${base64}`;
-
-        console.log(`Successfully generated image with ${model}`);
-
-        return NextResponse.json({ 
-          success: true, 
-          image: imageUrl,
-          isUrl: false,
-          prompt: prompt,
-          model: model
-        });
-
-      } catch (err) {
-        console.log(`Model ${model} error:`, err);
-        lastError = err instanceof Error ? err.message : 'Unknown error';
-        continue;
-      }
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('HF Image API Error:', response.status, errorText);
+      
+      // Try to parse error
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.includes('loading') || response.status === 503) {
+          const waitTime = errorJson.estimated_time || 20;
+          return NextResponse.json({ 
+            success: false,
+            error: `Model sedang loading, coba lagi dalam ${Math.ceil(waitTime)} detik`,
+            retryIn: Math.ceil(waitTime)
+          }, { status: 503 });
+        }
+      } catch {}
+      
+      return NextResponse.json({ 
+        success: false,
+        error: `API Error: ${response.status}`,
+        details: errorText
+      }, { status: 500 });
     }
 
-    // All models failed
+    // Response is image binary
+    const imageBuffer = await response.arrayBuffer();
+    
+    if (imageBuffer.byteLength < 1000) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Response terlalu kecil, mungkin error'
+      }, { status: 500 });
+    }
+
+    const base64 = Buffer.from(imageBuffer).toString('base64');
+    const imageUrl = `data:image/png;base64,${base64}`;
+
+    console.log('Image generated successfully, size:', imageBuffer.byteLength);
+
     return NextResponse.json({ 
-      success: false,
-      error: 'Semua model gagal. Coba lagi dalam beberapa menit.', 
-      details: lastError 
-    }, { status: 500 });
+      success: true, 
+      image: imageUrl,
+      isUrl: false,
+      prompt: prompt
+    });
 
   } catch (error: unknown) {
     console.error('Image Generation API Error:', error);
