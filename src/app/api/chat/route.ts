@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, history } = await request.json();
+    const body = await request.json();
+    const { message, history } = body;
 
     if (!message) {
-      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Message is required' 
+      }, { status: 400 });
     }
 
+    // Dynamic import to avoid issues
+    const ZAI = (await import('z-ai-web-dev-sdk')).default;
+    
     const zai = await ZAI.create();
 
     // Build messages array with history
@@ -19,7 +28,7 @@ export async function POST(request: NextRequest) {
 Jawab dalam Bahasa Indonesia jika user menggunakan Bahasa Indonesia.
 Kamu bisa membantu dengan berbagai tugas seperti:
 - Menjawab pertanyaan
-- Menulis konten ( artikel, email, caption, dll)
+- Menulis konten (artikel, email, caption, dll)
 - Membantu coding
 - Memberikan saran dan ide
 - Menerjemahkan teks
@@ -57,8 +66,19 @@ Jawab dengan jelas, informatif, dan ramah.`
 
   } catch (error: unknown) {
     console.error('Chat API Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    let errorMessage = 'Unknown error';
+    let errorStack = '';
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorStack = error.stack || '';
+    }
+    
+    console.error('Error details:', errorMessage, errorStack);
+    
     return NextResponse.json({ 
+      success: false,
       error: 'Failed to process chat', 
       details: errorMessage 
     }, { status: 500 });

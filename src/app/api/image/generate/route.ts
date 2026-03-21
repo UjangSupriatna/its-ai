@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, size = '1024x1024' } = await request.json();
+    const body = await request.json();
+    const { prompt, size = '1024x1024' } = body;
 
     if (!prompt) {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Prompt is required' 
+      }, { status: 400 });
     }
 
+    // Dynamic import
+    const ZAI = (await import('z-ai-web-dev-sdk')).default;
     const zai = await ZAI.create();
 
     const response = await zai.images.generations.create({
@@ -19,7 +27,10 @@ export async function POST(request: NextRequest) {
     const imageBase64 = response.data[0]?.base64;
 
     if (!imageBase64) {
-      return NextResponse.json({ error: 'Failed to generate image' }, { status: 500 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Failed to generate image' 
+      }, { status: 500 });
     }
 
     return NextResponse.json({ 
@@ -32,6 +43,7 @@ export async function POST(request: NextRequest) {
     console.error('Image Generation API Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
+      success: false,
       error: 'Failed to generate image', 
       details: errorMessage 
     }, { status: 500 });

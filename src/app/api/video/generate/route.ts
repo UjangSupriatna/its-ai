@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, quality = 'speed', duration = 5, fps = 30, imageUrl } = await request.json();
+    const body = await request.json();
+    const { prompt, quality = 'speed', duration = 5, fps = 30, imageUrl } = body;
 
     if (!prompt && !imageUrl) {
-      return NextResponse.json({ error: 'Prompt or imageUrl is required' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Prompt or imageUrl is required' 
+      }, { status: 400 });
     }
 
+    // Dynamic import
+    const ZAI = (await import('z-ai-web-dev-sdk')).default;
     const zai = await ZAI.create();
 
     // Create video generation task
@@ -39,6 +47,7 @@ export async function POST(request: NextRequest) {
     console.error('Video Generation API Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
+      success: false,
       error: 'Failed to start video generation', 
       details: errorMessage 
     }, { status: 500 });
@@ -52,9 +61,14 @@ export async function GET(request: NextRequest) {
     const taskId = searchParams.get('taskId');
 
     if (!taskId) {
-      return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Task ID is required' 
+      }, { status: 400 });
     }
 
+    // Dynamic import
+    const ZAI = (await import('z-ai-web-dev-sdk')).default;
     const zai = await ZAI.create();
 
     const result = await zai.async.result.query(taskId);
@@ -76,6 +90,7 @@ export async function GET(request: NextRequest) {
     console.error('Video Status API Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
+      success: false,
       error: 'Failed to check video status', 
       details: errorMessage 
     }, { status: 500 });
