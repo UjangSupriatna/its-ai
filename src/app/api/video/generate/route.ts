@@ -8,7 +8,7 @@ const HF_TOKEN = process.env.HF_TOKEN;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, quality = 'speed', duration = 5 } = body;
+    const { prompt, duration = 5 } = body;
 
     if (!prompt) {
       return NextResponse.json({ 
@@ -24,14 +24,11 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Enhance prompt for video
-    const enhancedPrompt = `${prompt}, cinematic, high quality, smooth motion`;
-
-    // Use Hugging Face text-to-video model
+    // Try text-to-video model
     const model = 'ali-vilab/text-to-video-ms-1.7b';
     const url = `https://api-inference.huggingface.co/models/${model}`;
 
-    console.log('Generating video with prompt:', enhancedPrompt);
+    console.log('Generating video with prompt:', prompt);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -40,9 +37,9 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        inputs: enhancedPrompt,
+        inputs: prompt,
         parameters: {
-          num_frames: Math.min(duration * 8, 24), // 8 frames per second, max 24
+          num_frames: Math.min(duration * 8, 16), // Keep it small for reliability
         }
       }),
     });
@@ -51,22 +48,46 @@ export async function POST(request: NextRequest) {
       const errorText = await response.text();
       console.error('HF Video API Error:', response.status, errorText);
       
-      // Check if model is loading
-      if (response.status === 503 || errorText.includes('loading')) {
+      // Parse error for better message
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.includes('loading')) {
+          return NextResponse.json({ 
+            success: false,
+            error: 'Model video sedang loading. Ini model besar, coba lagi dalam 2-3 menit.',
+            estimated_time: errorJson.estimated_time || 120
+          }, { status: 503 });
+        }
+      } catch {}
+      
+      if (response.status === 503) {
         return NextResponse.json({ 
           success: false,
-          error: 'Model video sedang loading, coba lagi dalam 1-2 menit',
-          retryIn: 60
+          error: 'Model video sedang loading, coba lagi dalam 2-3 menit'
         }, { status: 503 });
       }
       
       throw new Error(`HF API Error: ${response.status} - ${errorText}`);
     }
 
-    // Response should be a video file (mp4)
+    // Check content type
+    const contentType = response.headers.get('content-type') || '';
+    console.log('Response content-type:', contentType);
+
+    // Response should be a video file
     const videoBuffer = await response.arrayBuffer();
+    
+    if (videoBuffer.byteLength < 1000) {
+      // Too small, probably an error
+      const text = new TextDecoder().decode(videoBuffer);
+      console.error('Small response:', text);
+      throw new Error('Invalid video response');
+    }
+
     const base64 = Buffer.from(videoBuffer).toString('base64');
     const videoUrl = `data:video/mp4;base64,${base64}`;
+
+    console.log('Video generated successfully, size:', videoBuffer.byteLength);
 
     return NextResponse.json({ 
       success: true, 
@@ -81,7 +102,7 @@ export async function POST(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
       success: false,
-      error: 'Gagal generate video. Coba lagi nanti.', 
+      error: 'Gagal generate video. Model video membutuhkan waktu loading yang lama.', 
       details: errorMessage 
     }, { status: 500 });
   }
@@ -92,7 +113,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('taskId');
-    const videoUrl = searchParams.get('videoUrl');
 
     if (!taskId) {
       return NextResponse.json({ 
@@ -103,8 +123,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ 
       success: true,
-      status: 'SUCCESS',
-      videoUrl: videoUrl || ''
+      status: 'SUCCESS'
     });
 
   } catch (error: unknown) {
