@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore, GOOGLE_CLIENT_ID, getRedirectUri } from '@/lib/auth-store';
+import { useAuthStore, getRedirectUri } from '@/lib/auth-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, AlertCircle } from 'lucide-react';
+
+// Get client ID from environment
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
 export default function LoginPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -19,9 +23,22 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router]);
 
+  // Check if client ID is configured
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) {
+      setError('Google Client ID belum dikonfigurasi. Silakan tambahkan NEXT_PUBLIC_GOOGLE_CLIENT_ID di Environment Variables.');
+    }
+  }, []);
+
   // Google OAuth Login - Direct to Google
   const handleGoogleLogin = () => {
+    if (!GOOGLE_CLIENT_ID) {
+      setError('Google Client ID tidak ditemukan!');
+      return;
+    }
+
     setIsLoading(true);
+    setError(null);
     
     const redirectUri = getRedirectUri();
     
@@ -31,8 +48,6 @@ export default function LoginPage() {
     googleAuthUrl.searchParams.set('redirect_uri', redirectUri);
     googleAuthUrl.searchParams.set('response_type', 'code');
     googleAuthUrl.searchParams.set('scope', 'email profile');
-    googleAuthUrl.searchParams.set('access_type', 'offline');
-    googleAuthUrl.searchParams.set('prompt', 'consent');
     
     // Redirect to Google
     window.location.href = googleAuthUrl.toString();
@@ -66,11 +81,22 @@ export default function LoginPage() {
         </CardHeader>
         
         <CardContent className="pt-6 space-y-4">
+          {/* Error Message */}
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-400 text-sm font-medium">Konfigurasi Error</p>
+                <p className="text-red-300/80 text-xs mt-1">{error}</p>
+              </div>
+            </div>
+          )}
+
           {/* Google Login Button */}
           <Button
             onClick={handleGoogleLogin}
-            disabled={isLoading}
-            className="w-full h-14 bg-white hover:bg-slate-100 text-slate-900 font-medium text-lg shadow-lg rounded-xl transition-all"
+            disabled={isLoading || !GOOGLE_CLIENT_ID}
+            className="w-full h-14 bg-white hover:bg-slate-100 text-slate-900 font-medium text-lg shadow-lg rounded-xl transition-all disabled:opacity-50"
           >
             {isLoading ? (
               <Loader2 className="w-5 h-5 mr-3 animate-spin" />
