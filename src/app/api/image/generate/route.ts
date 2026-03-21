@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,32 +15,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get config
-    const config = getZaiConfig();
-
-    // Dynamic import and directly instantiate with config
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = new ZAI(config);
-
-    const response = await zai.images.generations.create({
-      prompt: prompt,
-      size: size as '1024x1024' | '768x1344' | '864x1152' | '1344x768' | '1152x864' | '1440x720' | '720x1440',
-    });
-
-    const imageBase64 = response.data[0]?.base64;
-
-    if (!imageBase64) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'Failed to generate image' 
-      }, { status: 500 });
-    }
-
+    // Image generation not available on Vercel with free HF token
+    // Requires dedicated image generation API
     return NextResponse.json({ 
-      success: true, 
-      image: `data:image/png;base64,${imageBase64}`,
+      success: false,
+      error: 'Image generation memerlukan API khusus. Fitur ini tersedia saat deploy ke jagoan hosting.',
       prompt: prompt
-    });
+    }, { status: 503 });
 
   } catch (error: unknown) {
     console.error('Image Generation API Error:', error);

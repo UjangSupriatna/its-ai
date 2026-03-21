@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,16 +15,17 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get config
-    const config = getZaiConfig();
-    console.log('ZAI Config loaded:', { baseUrl: config.baseUrl, hasToken: !!config.token });
+    const HF_TOKEN = process.env.HF_TOKEN;
+    
+    if (!HF_TOKEN) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'HF_TOKEN not configured' 
+      }, { status: 500 });
+    }
 
-    // Dynamic import and directly instantiate with config
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = new ZAI(config);
-
-    // Build messages array with history
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    // Build messages array
+    const messages: Array<{ role: string; content: string }> = [
       {
         role: 'system',
         content: `Kamu adalah asisten AI yang helpful dan friendly. 
@@ -57,24 +57,35 @@ Jawab dengan jelas, informatif, dan ramah.`
       content: message
     });
 
-    const completion = await zai.chat.completions.create({
-      messages: messages,
+    // Use Hugging Face Router API with Llama 3.1 8B (OpenAI-compatible format)
+    const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${HF_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/Llama-3.1-8B-Instruct',
+        messages: messages,
+      }),
     });
 
-    const response = completion.choices[0]?.message?.content || 'Maaf, saya tidak bisa menjawab saat ini.';
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`HF API Error: ${response.status} - ${error}`);
+    }
+
+    const result = await response.json();
+    const assistantMessage = result.choices?.[0]?.message?.content || 'Maaf, tidak ada response.';
 
     return NextResponse.json({ 
       success: true, 
-      response: response 
+      response: assistantMessage 
     });
 
   } catch (error: unknown) {
     console.error('Chat API Error:', error);
-    
-    let errorMessage = 'Unknown error';
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
     return NextResponse.json({ 
       success: false,

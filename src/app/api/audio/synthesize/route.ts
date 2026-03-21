@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,28 +22,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get config
-    const config = getZaiConfig();
-
-    // Dynamic import and directly instantiate with config
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = new ZAI(config);
-
-    // TTS uses 'input' not 'text'
-    const response = await zai.audio.tts.create({
-      input: text,
-      voice: voice,
-    });
-
-    // Response is a Response object, need to convert to base64
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
-
+    // Use a free TTS API - VoiceRSS or similar
+    // For now, we'll use a simple approach with Web Speech API on client
+    // Or return an error message that TTS is not available
+    
     return NextResponse.json({ 
-      success: true, 
-      audio: `data:audio/wav;base64,${base64}`,
-      voice: voice
-    });
+      success: false,
+      error: 'TTS feature requires internal API server. Please deploy to jagoan hosting for full features.',
+      text: text
+    }, { status: 503 });
 
   } catch (error: unknown) {
     console.error('TTS API Error:', error);
