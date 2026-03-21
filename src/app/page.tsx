@@ -338,7 +338,25 @@ export default function AIContentStudio() {
       const data = await response.json();
       
       if (data.success) {
-        setTtsAudio(data.audio);
+        if (data.useBrowserTTS) {
+          // Use browser's built-in TTS
+          const utterance = new SpeechSynthesisUtterance(ttsText);
+          utterance.lang = 'id-ID';
+          utterance.rate = 1;
+          utterance.pitch = 1;
+          
+          // Get available voices and try to find Indonesian voice
+          const voices = window.speechSynthesis.getVoices();
+          const idVoice = voices.find(v => v.lang.includes('id')) || voices[0];
+          if (idVoice) utterance.voice = idVoice;
+          
+          // Set a placeholder to show TTS is ready
+          setTtsAudio('browser-tts');
+          
+          window.speechSynthesis.speak(utterance);
+        } else {
+          setTtsAudio(data.audio);
+        }
       } else {
         alert(`Error: ${data.error || 'Failed to synthesize speech'}`);
       }
@@ -369,11 +387,22 @@ export default function AIContentStudio() {
       const data = await response.json();
       
       if (data.success) {
-        setVideoTasks(prev => [...prev, {
-          taskId: data.taskId,
-          status: data.status,
-          prompt: videoPrompt
-        }]);
+        if (data.videoUrl) {
+          // Direct video URL available
+          setVideoTasks(prev => [...prev, {
+            taskId: data.taskId || `video_${Date.now()}`,
+            status: 'SUCCESS',
+            prompt: videoPrompt,
+            videoUrl: data.videoUrl
+          }]);
+        } else {
+          // Polling needed
+          setVideoTasks(prev => [...prev, {
+            taskId: data.taskId,
+            status: data.status,
+            prompt: videoPrompt
+          }]);
+        }
         setVideoPrompt('');
       } else {
         alert(`Error: ${data.error || 'Failed to start video generation'}`);
@@ -800,27 +829,38 @@ export default function AIContentStudio() {
                             </div>
                             <div>
                               <p className="text-white font-medium text-sm sm:text-base">Audio Generated</p>
-                              <p className="text-slate-400 text-xs sm:text-sm">Klik play untuk mendengar</p>
+                              <p className="text-slate-400 text-xs sm:text-sm">
+                                {ttsAudio === 'browser-tts' ? 'Memutar via Browser TTS' : 'Klik play untuk mendengar'}
+                              </p>
                             </div>
                           </div>
-                          <audio 
-                            controls 
-                            src={ttsAudio} 
-                            className="w-full"
-                          />
+                          {ttsAudio === 'browser-tts' ? (
+                            <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                              <p className="text-emerald-300 text-sm">🔊 Audio sedang diputar via Browser TTS...</p>
+                              <p className="text-slate-400 text-xs mt-2">Tip: Pastikan speaker Anda aktif</p>
+                            </div>
+                          ) : (
+                            <audio 
+                              controls 
+                              src={ttsAudio} 
+                              className="w-full"
+                            />
+                          )}
                         </div>
-                        <Button 
-                          onClick={() => {
-                            const link = document.createElement('a');
-                            link.href = ttsAudio;
-                            link.download = 'speech.wav';
-                            link.click();
-                          }}
-                          className="w-full h-10 sm:h-12 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white shadow-lg shadow-violet-500/25 text-sm sm:text-base"
-                        >
-                          <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                          Download Audio
-                        </Button>
+                        {ttsAudio !== 'browser-tts' && (
+                          <Button 
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = ttsAudio;
+                              link.download = 'speech.wav';
+                              link.click();
+                            }}
+                            className="w-full h-10 sm:h-12 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white shadow-lg shadow-violet-500/25 text-sm sm:text-base"
+                          >
+                            <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                            Download Audio
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <div className="h-48 sm:h-64 flex items-center justify-center border border-white/5 rounded-xl sm:rounded-2xl bg-slate-800/20">

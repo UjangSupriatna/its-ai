@@ -15,13 +15,22 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Image generation not available on Vercel with free HF token
-    // Requires dedicated image generation API
+    // Use multiple free image generation APIs
+    const encodedPrompt = encodeURIComponent(prompt);
+    
+    // Option 1: Pollinations AI (Free, no API key needed)
+    // Format: https://image.pollinations.ai/prompt/{prompt}?width={w}&height={h}&nologo=true
+    const [width, height] = size.split('x').map(Number);
+    
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Date.now()}`;
+
+    // Return the URL directly - client will fetch it
     return NextResponse.json({ 
-      success: false,
-      error: 'Image generation memerlukan API khusus. Fitur ini tersedia saat deploy ke jagoan hosting.',
+      success: true, 
+      image: imageUrl,
+      isUrl: true,
       prompt: prompt
-    }, { status: 503 });
+    });
 
   } catch (error: unknown) {
     console.error('Image Generation API Error:', error);

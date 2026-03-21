@@ -22,23 +22,50 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Use a free TTS API - VoiceRSS or similar
-    // For now, we'll use a simple approach with Web Speech API on client
-    // Or return an error message that TTS is not available
+    // Use free TTS - try multiple providers
+    const encodedText = encodeURIComponent(text);
     
+    // Try Google Translate TTS first
+    try {
+      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=id&client=tw-ob`;
+      
+      const response = await fetch(ttsUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://translate.google.com/'
+        }
+      });
+
+      if (response.ok) {
+        const audioBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(audioBuffer).toString('base64');
+
+        return NextResponse.json({ 
+          success: true, 
+          audio: `data:audio/mpeg;base64,${base64}`,
+          voice: voice
+        });
+      }
+    } catch (e) {
+      console.log('Google TTS failed, using browser fallback');
+    }
+
+    // Fallback: Use browser's built-in TTS
     return NextResponse.json({ 
-      success: false,
-      error: 'TTS feature requires internal API server. Please deploy to jagoan hosting for full features.',
-      text: text
-    }, { status: 503 });
+      success: true, 
+      useBrowserTTS: true,
+      text: text,
+      message: 'Using browser Text-to-Speech'
+    });
 
   } catch (error: unknown) {
     console.error('TTS API Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Fallback to browser TTS on any error
     return NextResponse.json({ 
-      success: false,
-      error: 'Failed to synthesize speech', 
-      details: errorMessage 
-    }, { status: 500 });
+      success: true, 
+      useBrowserTTS: true,
+      message: 'Using browser TTS fallback'
+    });
   }
 }
