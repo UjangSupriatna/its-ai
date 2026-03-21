@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure Z-AI config exists
+    ensureZaiConfig();
+
     const body = await request.json();
     const { prompt, quality = 'speed', duration = 5, fps = 30, imageUrl } = body;
 
@@ -57,6 +61,9 @@ export async function POST(request: NextRequest) {
 // Check video generation status
 export async function GET(request: NextRequest) {
   try {
+    // Ensure Z-AI config exists
+    ensureZaiConfig();
+
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('taskId');
 

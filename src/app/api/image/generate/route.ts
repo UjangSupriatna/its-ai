@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure Z-AI config exists
+    ensureZaiConfig();
+
     const body = await request.json();
     const { prompt, size = '1024x1024' } = body;
 

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure Z-AI config exists
+    ensureZaiConfig();
+
     const body = await request.json();
     const { message, history } = body;
 
@@ -15,9 +19,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Dynamic import to avoid issues
+    // Dynamic import
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    
     const zai = await ZAI.create();
 
     // Build messages array with history
@@ -68,14 +71,9 @@ Jawab dengan jelas, informatif, dan ramah.`
     console.error('Chat API Error:', error);
     
     let errorMessage = 'Unknown error';
-    let errorStack = '';
-    
     if (error instanceof Error) {
       errorMessage = error.message;
-      errorStack = error.stack || '';
     }
-    
-    console.error('Error details:', errorMessage, errorStack);
     
     return NextResponse.json({ 
       success: false,
