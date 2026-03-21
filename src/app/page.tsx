@@ -669,7 +669,7 @@ export default function AIContentStudio() {
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleChat()}
-                      placeholder="Ketik pesan... (bisa pakai markdown)"
+                      placeholder="Ketik pesan..."
                       className="bg-slate-800/50 border-white/10 text-white placeholder-slate-500 h-10 sm:h-12 text-sm sm:text-base focus:border-violet-500 focus:ring-violet-500/20"
                     />
                     <Button 

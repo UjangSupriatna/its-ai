@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateImage } from '@/lib/huggingface';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,29 +16,35 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Use multiple free image generation APIs
-    const encodedPrompt = encodeURIComponent(prompt);
-    
-    // Option 1: Pollinations AI (Free, no API key needed)
-    // Format: https://image.pollinations.ai/prompt/{prompt}?width={w}&height={h}&nologo=true
-    const [width, height] = size.split('x').map(Number);
-    
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Date.now()}`;
+    // Enhance prompt for better results
+    const enhancedPrompt = `${prompt}, high quality, detailed, 4k, professional`;
 
-    // Return the URL directly - client will fetch it
+    // Use Hugging Face for image generation (requires HF_TOKEN)
+    const imageUrl = await generateImage(enhancedPrompt);
+
     return NextResponse.json({ 
       success: true, 
       image: imageUrl,
-      isUrl: true,
+      isUrl: false,
       prompt: prompt
     });
 
   } catch (error: unknown) {
     console.error('Image Generation API Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Check if it's a model loading error
+    if (errorMessage.includes('loading') || errorMessage.includes('Loading')) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Model sedang loading, coba lagi dalam 30 detik', 
+        details: errorMessage 
+      }, { status: 503 });
+    }
+    
     return NextResponse.json({ 
       success: false,
-      error: 'Failed to generate image', 
+      error: 'Gagal generate gambar. Pastikan HF_TOKEN sudah dikonfigurasi.', 
       details: errorMessage 
     }, { status: 500 });
   }

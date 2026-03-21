@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const HF_TOKEN = process.env.HF_TOKEN;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -15,28 +17,63 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Use a simple approach - create an animated image/loop video
-    // Since free video APIs are limited, we'll create a simple video-like experience
-    
-    const encodedPrompt = encodeURIComponent(prompt);
-    const seed = Date.now();
-    
-    // For now, we'll return success with a video URL that can be displayed
-    // Using a placeholder that shows the prompt as a video-like element
-    
-    // Note: Real video generation requires paid APIs
-    // This creates an animated GIF-like experience from the image
-    
-    const videoUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}%20cinematic%20motion%20blur%20video%20still?width=1280&height=720&nologo=true&seed=${seed}`;
-    
+    if (!HF_TOKEN) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'HF_TOKEN not configured' 
+      }, { status: 500 });
+    }
+
+    // Enhance prompt for video
+    const enhancedPrompt = `${prompt}, cinematic, high quality, smooth motion`;
+
+    // Use Hugging Face text-to-video model
+    const model = 'ali-vilab/text-to-video-ms-1.7b';
+    const url = `https://api-inference.huggingface.co/models/${model}`;
+
+    console.log('Generating video with prompt:', enhancedPrompt);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${HF_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: enhancedPrompt,
+        parameters: {
+          num_frames: Math.min(duration * 8, 24), // 8 frames per second, max 24
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('HF Video API Error:', response.status, errorText);
+      
+      // Check if model is loading
+      if (response.status === 503 || errorText.includes('loading')) {
+        return NextResponse.json({ 
+          success: false,
+          error: 'Model video sedang loading, coba lagi dalam 1-2 menit',
+          retryIn: 60
+        }, { status: 503 });
+      }
+      
+      throw new Error(`HF API Error: ${response.status} - ${errorText}`);
+    }
+
+    // Response should be a video file (mp4)
+    const videoBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(videoBuffer).toString('base64');
+    const videoUrl = `data:video/mp4;base64,${base64}`;
+
     return NextResponse.json({ 
       success: true, 
-      taskId: `video_${seed}`,
+      taskId: `video_${Date.now()}`,
       status: 'SUCCESS',
-      message: 'Video frame generated successfully',
       videoUrl: videoUrl,
-      prompt: prompt,
-      note: 'Generated as video frame. Full video requires premium API.'
+      prompt: prompt
     });
 
   } catch (error: unknown) {
@@ -44,7 +81,7 @@ export async function POST(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
       success: false,
-      error: 'Failed to generate video', 
+      error: 'Gagal generate video. Coba lagi nanti.', 
       details: errorMessage 
     }, { status: 500 });
   }
