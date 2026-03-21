@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ZAI_CONFIG } from '@/lib/zai-config';
+import { getZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,9 +16,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Get config
+    const config = getZaiConfig();
+    console.log('ZAI Config loaded:', { baseUrl: config.baseUrl, hasToken: !!config.token });
+
     // Dynamic import and directly instantiate with config
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = new ZAI(ZAI_CONFIG);
+    const zai = new ZAI(config);
 
     // Build messages array with history
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [

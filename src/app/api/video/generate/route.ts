@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ZAI_CONFIG } from '@/lib/zai-config';
+import { getZaiConfig } from '@/lib/zai-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,9 +16,12 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Get config
+    const config = getZaiConfig();
+
     // Dynamic import and directly instantiate with config
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = new ZAI(ZAI_CONFIG);
+    const zai = new ZAI(config);
 
     // Create video generation task
     const taskParams: Record<string, unknown> = {
@@ -68,9 +71,12 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Get config
+    const config = getZaiConfig();
+
     // Dynamic import and directly instantiate with config
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = new ZAI(ZAI_CONFIG);
+    const zai = new ZAI(config);
 
     const result = await zai.async.result.query(taskId);
 
