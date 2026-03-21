@@ -220,6 +220,7 @@ export default function AIContentStudio() {
   const [generatedImage, setGeneratedImage] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
   const [imageSize, setImageSize] = useState('1024x1024');
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   // Text-to-Speech State
   const [ttsText, setTtsText] = useState('');
@@ -299,6 +300,7 @@ export default function AIContentStudio() {
 
     setImageLoading(true);
     setGeneratedImage('');
+    setImageLoaded(false);
 
     try {
       const response = await fetch('/api/image/generate', {
@@ -415,9 +417,9 @@ export default function AIContentStudio() {
   };
 
   // Check Video Status
-  const checkVideoStatus = async (taskId: string) => {
+  const checkVideoStatus = async (taskId: string, videoUrl?: string) => {
     try {
-      const response = await fetch(`/api/video/generate?taskId=${taskId}`);
+      const response = await fetch(`/api/video/generate?taskId=${taskId}&videoUrl=${encodeURIComponent(videoUrl || '')}`);
       const data = await response.json();
       
       if (data.success) {
@@ -438,18 +440,39 @@ export default function AIContentStudio() {
     if (processingTasks.length === 0) return;
 
     const interval = setInterval(() => {
-      processingTasks.forEach(task => checkVideoStatus(task.taskId));
+      processingTasks.forEach(task => checkVideoStatus(task.taskId, task.videoUrl));
     }, 10000);
 
     return () => clearInterval(interval);
   }, [videoTasks]);
 
-  // Download image
-  const downloadImage = (base64Image: string, filename: string) => {
-    const link = document.createElement('a');
-    link.href = base64Image;
-    link.download = filename;
-    link.click();
+  // Download image (handles both base64 and URL)
+  const downloadImage = async (imageSrc: string, filename: string) => {
+    try {
+      // Check if it's a URL or base64
+      if (imageSrc.startsWith('http')) {
+        // Fetch the image and convert to blob
+        const response = await fetch(imageSrc);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        // Base64 image
+        const link = document.createElement('a');
+        link.href = imageSrc;
+        link.download = filename;
+        link.click();
+      }
+    } catch (error) {
+      // Fallback: open in new tab
+      window.open(imageSrc, '_blank');
+    }
   };
 
   // Clear chat
@@ -730,15 +753,29 @@ export default function AIContentStudio() {
                   {generatedImage ? (
                     <div className="space-y-4">
                       <div className="relative rounded-xl sm:rounded-2xl overflow-hidden border border-white/10">
+                        {!imageLoaded && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-slate-800/50 z-10">
+                            <div className="text-center">
+                              <Loader2 className="w-8 h-8 text-pink-400 animate-spin mx-auto mb-2" />
+                              <p className="text-slate-400 text-sm">Memuat gambar...</p>
+                            </div>
+                          </div>
+                        )}
                         <img 
                           src={generatedImage} 
                           alt="Generated" 
                           className="w-full"
+                          onLoad={() => setImageLoaded(true)}
+                          onError={() => {
+                            setImageLoaded(true);
+                            alert('Gagal memuat gambar. Coba lagi.');
+                          }}
                         />
                       </div>
                       <Button 
                         onClick={() => downloadImage(generatedImage, 'ai-generated.png')}
-                        className="w-full h-10 sm:h-12 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/25 text-sm sm:text-base"
+                        disabled={!imageLoaded}
+                        className="w-full h-10 sm:h-12 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/25 text-sm sm:text-base disabled:opacity-50"
                       >
                         <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                         Download Gambar
@@ -987,7 +1024,7 @@ export default function AIContentStudio() {
                             {task.status === 'PROCESSING' && (
                               <Button 
                                 size="sm" 
-                                onClick={() => checkVideoStatus(task.taskId)}
+                                onClick={() => checkVideoStatus(task.taskId, task.videoUrl)}
                                 variant="outline"
                                 className="border-white/10 text-slate-300 hover:text-white hover:bg-white/5 h-7 sm:h-8 text-[10px] sm:text-xs"
                               >
