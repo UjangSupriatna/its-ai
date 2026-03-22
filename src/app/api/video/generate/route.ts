@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, duration = 5 } = body;
+    const { prompt } = body;
 
     if (!prompt) {
       return NextResponse.json({
@@ -20,16 +20,18 @@ export async function POST(request: NextRequest) {
     if (!HF_TOKEN) {
       return NextResponse.json({
         success: false,
-        error: 'HF_TOKEN not configured'
+        error: 'HF_TOKEN not configured. Please add HF_TOKEN to Vercel Environment Variables.'
       }, { status: 500 });
     }
 
-    // For video, we generate an image with cinematic prompt
-    // Real video generation is too heavy for serverless
-    const model = 'black-forest-labs/FLUX.1-schnell';
+    // For video, we generate a cinematic image
+    const videoPrompt = `${prompt}, cinematic, dramatic lighting, professional photography`;
+
+    // Try Stable Diffusion for video frame
+    const model = 'stabilityai/stable-diffusion-xl-base-1.0';
     const url = `https://api-inference.huggingface.co/models/${model}`;
 
-    const videoPrompt = `${prompt}, cinematic, motion blur, dynamic scene, 16:9 widescreen`;
+    console.log('Generating video frame with prompt:', videoPrompt);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -39,11 +41,6 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         inputs: videoPrompt,
-        parameters: {
-          width: 1280,
-          height: 720,
-          num_inference_steps: 4,
-        }
       }),
     });
 
@@ -56,20 +53,23 @@ export async function POST(request: NextRequest) {
         if (errorJson.error?.includes('loading') || response.status === 503) {
           return NextResponse.json({
             success: false,
-            error: 'Model sedang loading, coba lagi dalam 30 detik'
+            error: 'Model sedang loading, coba lagi dalam 1-2 menit'
           }, { status: 503 });
         }
       } catch {}
 
       return NextResponse.json({
         success: false,
-        error: `API Error: ${response.status}`
+        error: `API Error: ${response.status}`,
+        details: errorText
       }, { status: 500 });
     }
 
     const imageBuffer = await response.arrayBuffer();
     const base64 = Buffer.from(imageBuffer).toString('base64');
     const videoFrameUrl = `data:image/png;base64,${base64}`;
+
+    console.log('Video frame generated successfully');
 
     return NextResponse.json({
       success: true,
