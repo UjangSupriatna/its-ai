@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import ZAI from 'z-ai-web-dev-sdk';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
+
+async function getZAI() {
+  if (!zaiInstance) {
+    zaiInstance = await ZAI.create();
+  }
+  return zaiInstance;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,26 +19,27 @@ export async function POST(request: NextRequest) {
     const { message, history } = body;
 
     if (!message) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        error: 'Message is required' 
+        error: 'Message is required'
       }, { status: 400 });
     }
 
-    const HF_TOKEN = process.env.HF_TOKEN;
-    
-    if (!HF_TOKEN) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'HF_TOKEN not configured' 
-      }, { status: 500 });
+    const zai = await getZAI();
+
+    // Build conversation context
+    let conversationContext = '';
+    if (history && Array.isArray(history) && history.length > 0) {
+      for (const msg of history) {
+        if (msg.role === 'user') {
+          conversationContext += `User: ${msg.content}\n`;
+        } else {
+          conversationContext += `Assistant: ${msg.content}\n`;
+        }
+      }
     }
 
-    // Build messages array
-    const messages: Array<{ role: string; content: string }> = [
-      {
-        role: 'system',
-        content: `Kamu adalah asisten AI yang helpful dan friendly. 
+    const systemPrompt = `Kamu adalah asisten AI yang helpful dan friendly.
 Jawab dalam Bahasa Indonesia jika user menggunakan Bahasa Indonesia.
 Kamu bisa membantu dengan berbagai tugas seperti:
 - Menjawab pertanyaan
@@ -37,60 +48,38 @@ Kamu bisa membantu dengan berbagai tugas seperti:
 - Memberikan saran dan ide
 - Menerjemahkan teks
 
-Jawab dengan jelas, informatif, dan ramah.`
-      }
-    ];
+Jawab dengan jelas, informatif, dan ramah.`;
 
-    // Add conversation history
-    if (history && Array.isArray(history)) {
-      for (const msg of history) {
-        messages.push({
+    const fullPrompt = conversationContext
+      ? `${systemPrompt}\n\n${conversationContext}User: ${message}\nAssistant:`
+      : `${systemPrompt}\n\nUser: ${message}\nAssistant:`;
+
+    const response = await zai.chat.completions.create({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).map((msg: { role: string; content: string }) => ({
           role: msg.role,
           content: msg.content
-        });
-      }
-    }
-
-    // Add current message
-    messages.push({
-      role: 'user',
-      content: message
+        })),
+        { role: 'user', content: message }
+      ],
     });
 
-    // Use Hugging Face Router API with Llama 3.1 8B (OpenAI-compatible format)
-    const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${HF_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/Llama-3.1-8B-Instruct',
-        messages: messages,
-      }),
-    });
+    const assistantMessage = response.choices?.[0]?.message?.content || 'Maaf, tidak ada response.';
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`HF API Error: ${response.status} - ${error}`);
-    }
-
-    const result = await response.json();
-    const assistantMessage = result.choices?.[0]?.message?.content || 'Maaf, tidak ada response.';
-
-    return NextResponse.json({ 
-      success: true, 
-      response: assistantMessage 
+    return NextResponse.json({
+      success: true,
+      response: assistantMessage
     });
 
   } catch (error: unknown) {
     console.error('Chat API Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       success: false,
-      error: 'Failed to process chat', 
-      details: errorMessage 
+      error: 'Failed to process chat',
+      details: errorMessage
     }, { status: 500 });
   }
 }
