@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// Initialize ZAI instance (will be reused)
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
-
-async function getZAI() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create();
-  }
-  return zaiInstance;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,43 +9,81 @@ export async function POST(request: NextRequest) {
     const { prompt, size = '1024x1024' } = body;
 
     if (!prompt) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        error: 'Prompt is required' 
+        error: 'Prompt is required'
       }, { status: 400 });
     }
 
-    console.log('Generating image with prompt:', prompt, 'size:', size);
+    const HF_TOKEN = process.env.HF_TOKEN;
 
-    const zai = await getZAI();
-
-    const response = await zai.images.generations.create({
-      prompt: prompt,
-      size: size as '1024x1024' | '768x1344' | '864x1152' | '1344x768' | '1152x864' | '1440x720' | '720x1440'
-    });
-
-    const imageBase64 = response.data[0]?.base64;
-
-    if (!imageBase64) {
-      throw new Error('No image data in response');
+    if (!HF_TOKEN) {
+      return NextResponse.json({
+        success: false,
+        error: 'HF_TOKEN not configured'
+      }, { status: 500 });
     }
 
-    console.log('Image generated successfully');
+    // Use FLUX model on Hugging Face
+    const model = 'black-forest-labs/FLUX.1-schnell';
+    const url = `https://api-inference.huggingface.co/models/${model}`;
 
-    return NextResponse.json({ 
-      success: true, 
-      image: `data:image/png;base64,${imageBase64}`,
-      isUrl: false,
+    const [width, height] = size.split('x').map(Number);
+    const enhancedPrompt = `${prompt}, high quality, detailed`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${HF_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: enhancedPrompt,
+        parameters: {
+          width: Math.min(width, 1024),
+          height: Math.min(height, 1024),
+          num_inference_steps: 4,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('HF Image API Error:', response.status, errorText);
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.includes('loading') || response.status === 503) {
+          return NextResponse.json({
+            success: false,
+            error: 'Model sedang loading, coba lagi dalam 30 detik'
+          }, { status: 503 });
+        }
+      } catch {}
+
+      return NextResponse.json({
+        success: false,
+        error: `API Error: ${response.status}`
+      }, { status: 500 });
+    }
+
+    const imageBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(imageBuffer).toString('base64');
+    const imageUrl = `data:image/png;base64,${base64}`;
+
+    return NextResponse.json({
+      success: true,
+      image: imageUrl,
       prompt: prompt
     });
 
   } catch (error: unknown) {
     console.error('Image Generation API Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: false,
-      error: 'Gagal generate gambar', 
-      details: errorMessage 
+      error: 'Gagal generate gambar',
+      details: errorMessage
     }, { status: 500 });
   }
 }
